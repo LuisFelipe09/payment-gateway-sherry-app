@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { avalancheFuji } from 'viem/chains';
 import { createMetadata, Metadata, ValidatedMetadata, ExecutionResponse } from '@sherrylinks/sdk';
-import { serialize } from 'wagmi';
 
 export async function GET(req: NextRequest) {
     try {
