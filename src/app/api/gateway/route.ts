@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createMetadata, Metadata, ValidatedMetadata, ExecutionResponse } from '@sherrylinks/sdk';
+import { createMetadata, Metadata, ValidatedMetadata } from '@sherrylinks/sdk';
 
 export async function GET(req: NextRequest) {
     try {
