@@ -10,6 +10,8 @@
   },
   "dependencies": {
     "@sherrylinks/sdk": "^2.20.18-beta.1",
+    "@vercel/kv": "^1.0.1",
+    "ethers": "^6.14.3",
     "next": "15.3.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
