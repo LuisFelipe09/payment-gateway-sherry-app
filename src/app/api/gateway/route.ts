@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createMetadata, Metadata, ValidatedMetadata, createSelectParam } from '@sherrylinks/sdk';
-import { NextJSPaymentGateway } from '@/lib/paymentGateway';
+import { createMetadata, Metadata, ValidatedMetadata, ExecutionResponse } from '@sherrylinks/sdk';
 import { kv } from '@vercel/kv';
-import { ethers } from 'ethers';
+import { avalancheFuji } from 'viem/chains';
+
 
 export async function GET(req: NextRequest) {
     try {
@@ -10,81 +10,64 @@ export async function GET(req: NextRequest) {
         const protocol = req.headers.get('x-forwarded-proto') || 'http';
         const serverUrl = `${protocol}://${host}`;
 
-        /*
-                const paymentKeys = await kv.keys('payment:*');
-        
-                // Obtener los datos de cada pago
-                const payments = await Promise.all(
-                    paymentKeys.map(key => kv.get(key))
-                );
-        
-                // Filtrar pagos que no sean null (por si alguno expiró)
-                const pending_payments = payments.filter(payment => payment !== null);
-        
-        
-        */
 
+        const now = new Date();
 
+        // Aquí podrías obtener los pagos pendientes desde tu base de datos o almacenamiento
+        // Ejemplo de cómo podrías obtener pagos pendientes desde Vercel KV (Redis)
+        const paymentKeys = await kv.keys('payment:*');
 
-        // Simple select parameter
-        const prioritySelect = createSelectParam(
-            'priority',
-            'Priority Level',
-            [
-                { label: 'Low', value: 1 },
-                { label: 'Medium', value: 2 },
-                { label: 'High', value: 3 },
-            ],
-            true, // required
-            'Select the priority for this action',
+        // Obtener los datos de cada pago
+        const payments = await Promise.all(
+            paymentKeys.map(key => kv.get(key))
         );
+
+        console.log('Pagos obtenidos:', payments);
+
+        // Filtrar pagos que no sean null (por si alguno expiró)
+        const pending_payments = payments
+            .filter(
+                (payment): payment is {
+                    merchant: string;
+                    amount: string;
+                    paymentId: string;
+                    status: string;
+                    expiresAt: string;
+                } =>
+                    payment !== null &&
+                    typeof payment === 'object' &&
+                    'merchant' in payment &&
+                    'amount' in payment &&
+                    'paymentId' in payment
+            )
+            .map(payment => ({
+                label: `${payment.merchant} ${payment.amount}`,
+                value: payment.paymentId
+            }));
 
 
         const metadata: Metadata = {
             url: 'https://sherry.social',
             icon: 'https://avatars.githubusercontent.com/u/117962315',
-            title: 'Mensaje con Timestamp',
+            title: 'Pagos Sherry',
             baseUrl: serverUrl,
             description:
-                'Almacena un mensaje con un timestamp optimizado calculado por nuestro algoritmo',
+                'Permite ralizar pagos a comercios y servicios',
             actions: [
                 {
                     type: 'dynamic',
-                    label: 'Almacenar Mensaje',
+                    label: 'Pagos Pendientes',
                     description:
-                        'Almacena tu mensaje con un timestamp personalizado calculado para almacenamiento óptimo',
+                        'muestra los pagos pendientes.',
                     chains: { source: 'fuji' },
                     path: `/api/gateway`,
                     params: [
                         {
-                            name: 'mensaje',
-                            label: '¡Tu Mensaje Hermano!',
-                            type: 'text',
-                            required: true,
-                            description: 'Ingresa el mensaje que quieres almacenar en la blockchain',
-                        },
-                        {
-                            name: 'token',
-                            label: 'Select Token',
+                            name: 'pago',
+                            label: 'seleccione el pago',
                             type: 'select',
                             required: true,
-                            options: [
-                                {
-                                    label: 'USDC',
-                                    value: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
-                                    description: 'USD Coin'
-                                },
-                                {
-                                    label: 'USDT',
-                                    value: '0xdAC17F958D2ee523a2206206994597C13D831ec7',
-                                    description: 'Tether USD'
-                                },
-                                {
-                                    label: 'DAI',
-                                    value: '0x6B175474E89094C44Da98b954EedeAC495271d0F',
-                                    description: 'Dai Stablecoin'
-                                }
-                            ]
+                            options: pending_payments,
                         }
                     ],
                 },
@@ -107,6 +90,75 @@ export async function GET(req: NextRequest) {
     }
 }
 
+export async function POST(request: NextRequest) {
+    try {
+        const body = await request.json();
+        const { paymentId } = body;
+
+        if (!paymentId) {
+            return NextResponse.json({ error: 'paymentId is required' }, { status: 400 });
+        }
+
+        // Definir el tipo de Payment
+        type Payment = {
+            payerAddress: string;
+            paymentId: string;
+            merchant: string;
+            token: string;
+            amount: string;
+            metadata?: any;
+            status?: string;
+            expiresAt: string;
+        };
+
+        // Buscar el pago en KV
+        const paymentRaw = await kv.get(`payment:${paymentId}`);
+        const payment = paymentRaw as Payment;
+
+        if (
+            !payment ||
+            typeof payment !== 'object' ||
+            //payment.status !== 'pending' ||
+            new Date(payment.expiresAt) < new Date()
+        ) {
+            return NextResponse.json({ error: 'Pago no válido o expirado' }, { status: 400 });
+        }
+
+        // Importar el gateway de pagos
+        const { NextJSPaymentGateway } = await import('@/lib/paymentGateway');
+        const gateway = new NextJSPaymentGateway();
+
+
+        const result = await gateway.executePayment({
+            ...payment,
+            metadata: typeof payment.metadata === 'string'
+                ? payment.metadata
+                : JSON.stringify(payment.metadata ?? {})
+        });
+
+        // Actualizar el estado del pago en KVz
+        //payment.status = 'completed';
+        await kv.set(`payment:${paymentId}`, payment);
+
+        const resp: ExecutionResponse = {
+            serializedTransaction: result,
+            chainId: avalancheFuji.name,
+        };
+
+        return NextResponse.json(resp, {
+            status: 200,
+            headers: {
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+            },
+        });
+    } catch (error) {
+        console.error('Error ejecutando el pago:', error);
+        return NextResponse.json({ error: 'Error al ejecutar el pago' }, { status: 500 });
+    }
+}
+
 
 export async function OPTIONS(request: NextRequest) {
     return new NextResponse(null, {
@@ -118,55 +170,4 @@ export async function OPTIONS(request: NextRequest) {
                 'Content-Type, Authorization, X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Date, X-Api-Version',
         },
     });
-}
-
-async function createPaymentHandler(req: NextRequest) {
-    try {
-        const body = await req.json();
-        const { merchantAddress, tokenAddress, amount, metadata } = body;
-
-        // Validaciones
-        if (!ethers.isAddress(merchantAddress) || !ethers.isAddress(tokenAddress)) {
-            return NextResponse.json({ error: 'Direcciones inválidas' }, { status: 400 });
-        }
-
-        if (!amount || BigInt(amount) <= 0) {
-            return NextResponse.json({ error: 'Monto inválido' }, { status: 400 });
-        }
-
-        const gateway = new NextJSPaymentGateway();
-
-        // Verificar que el token existe
-        await gateway.getTokenInfo(tokenAddress);
-
-        // Crear pago
-        const rawPayment = await gateway.createPayment(
-            merchantAddress,
-            tokenAddress,
-            amount,
-            metadata
-        );
-        const payment = {
-            ...rawPayment,
-        };
-
-        // Almacenar en KV (Redis)
-        await kv.set(`payment:${payment.paymentId}`, payment, { ex: 1800 }); // 30 min TTL
-
-        return NextResponse.json({
-            success: true,
-            payment: {
-                paymentId: payment.paymentId,
-                amount: payment.amount,
-                expiresAt: payment.expiresAt
-            }
-        });
-    } catch (error: any) {
-        console.error('Error creando pago:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-}
-
-export async function POST(req: NextRequest) {
-    return createPaymentHandler(req);
 }

@@ -1,5 +1,8 @@
 // lib/paymentGateway.js
 import { ethers } from 'ethers';
+import { serialize } from 'wagmi';
+import { avalancheFuji } from 'viem/chains';
+import { encodeFunctionData, TransactionSerializable } from 'viem';
 
 const MULTICALL3_ADDRESS = "0xcA11bde05977b3631167028862bE2a173976CA11";
 const MULTICALL3_ABI = [
@@ -47,6 +50,10 @@ const ERC20_ABI = [
 ];
 
 export class NextJSPaymentGateway {
+    gatewayAddress: string | undefined;
+    rpcUrl: string | undefined;
+    provider: ethers.JsonRpcProvider;
+
     constructor() {
         this.gatewayAddress = process.env.NEXT_PUBLIC_GATEWAY_CONTRACT;
         this.rpcUrl = process.env.NEXT_PUBLIC_RPC_URL;
@@ -54,7 +61,7 @@ export class NextJSPaymentGateway {
     }
 
     // Crear pago pendiente (API route)
-    async createPayment(merchantAddress, tokenAddress, amount, metadata) {
+    async createPayment(merchantAddress: string, tokenAddress: string, amount: string, metadata: any) {
         const paymentId = ethers.keccak256(
             ethers.toUtf8Bytes(
                 `${merchantAddress}-${tokenAddress}-${amount}-${Date.now()}-${Math.random()}`
@@ -65,7 +72,7 @@ export class NextJSPaymentGateway {
             paymentId,
             merchant: merchantAddress,
             token: tokenAddress,
-            amount: amount.toString(),
+            amount: amount,
             metadata,
             status: 'pending',
             createdAt: new Date().toISOString(),
@@ -76,17 +83,26 @@ export class NextJSPaymentGateway {
     }
 
     // Ejecutar pago con multicall (cliente)
-    async executePayment(signer, paymentDetails) {
-        const multicall = new ethers.Contract(MULTICALL3_ADDRESS, MULTICALL3_ABI, signer);
+    async executePayment(paymentDetails: {
+        payerAddress: string;
+        paymentId: string;
+        merchant: string;
+        token: string;
+        amount: string;
+        metadata: string;
+    }) {
+
         const gatewayInterface = new ethers.Interface(PAYMENT_GATEWAY_ABI);
         const erc20Interface = new ethers.Interface(ERC20_ABI);
 
-        const payerAddress = await signer.getAddress();
+        const signer = new ethers.JsonRpcSigner(this.provider, paymentDetails.payerAddress);
+
+        const payerAddress = await paymentDetails.payerAddress;
         const metadataHash = ethers.keccak256(ethers.toUtf8Bytes(JSON.stringify(paymentDetails.metadata)));
 
         // Verificar allowance
         const token = new ethers.Contract(paymentDetails.token, ERC20_ABI, signer);
-        const allowance = await token.allowance(payerAddress, this.gatewayAddress);
+        const allowance = 0;// await token.allowance(payerAddress, this.gatewayAddress);
 
         const calls = [
             // 1. Crear pago en contrato
@@ -125,12 +141,31 @@ export class NextJSPaymentGateway {
             ])
         });
 
-        const tx = await multicall.aggregate3(calls);
-        return tx;
+        const data = encodeFunctionData({
+            abi: MULTICALL3_ABI,
+            functionName: 'aggregate3',
+            args: [calls],
+        });
+
+        // Crear transacción de contrato inteligente
+        const tx: TransactionSerializable = {
+            to: MULTICALL3_ADDRESS,
+            data: data,
+            chainId: avalancheFuji.id,
+            type: 'legacy',
+        };
+
+        // Serializar transacción
+        const serialized = serialize(tx);
+
+
+
+        //const tx = await multicall.aggregate3(calls);
+        return serialized;
     }
 
     // Verificar información del token
-    async getTokenInfo(tokenAddress) {
+    async getTokenInfo(tokenAddress: string) {
         const token = new ethers.Contract(tokenAddress, ERC20_ABI, this.provider);
 
         try {
@@ -146,7 +181,7 @@ export class NextJSPaymentGateway {
     }
 
     // Verificar balance del usuario
-    async checkUserBalance(userAddress, tokenAddress, amount) {
+    async checkUserBalance(userAddress: string, tokenAddress: string, amount: string) {
         const token = new ethers.Contract(tokenAddress, ERC20_ABI, this.provider);
         const balance = await token.balanceOf(userAddress);
 
