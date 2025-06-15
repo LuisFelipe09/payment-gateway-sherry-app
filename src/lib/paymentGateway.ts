@@ -104,22 +104,9 @@ export class NextJSPaymentGateway {
         const token = new ethers.Contract(paymentDetails.token, ERC20_ABI, signer);
         const allowance = 0;// await token.allowance(payerAddress, this.gatewayAddress);
 
-        const calls = [
-            // 1. Crear pago en contrato
-            {
-                target: this.gatewayAddress,
-                allowFailure: false,
-                callData: gatewayInterface.encodeFunctionData("createPayment", [
-                    paymentDetails.paymentId,
-                    paymentDetails.merchant,
-                    paymentDetails.token,
-                    paymentDetails.amount,
-                    metadataHash
-                ])
-            }
-        ];
+        const calls = [];
 
-        // 2. Aprobar si es necesario
+        // 1. Aprobar si es necesario
         if (allowance < BigInt(paymentDetails.amount)) {
             calls.push({
                 target: paymentDetails.token,
@@ -131,7 +118,7 @@ export class NextJSPaymentGateway {
             });
         }
 
-        // 3. Ejecutar pago
+        // 2. Ejecutar pago
         calls.push({
             target: this.gatewayAddress,
             allowFailure: false,
