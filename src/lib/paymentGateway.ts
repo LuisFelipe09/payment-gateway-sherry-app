@@ -48,6 +48,7 @@ const ERC20_ABI = [
     "function symbol() view returns (string)",
     "function decimals() view returns (uint8)",
     "function transfer(address to, uint256 amount) returns (bool)",
+    "function transferFrom(address from, address to, uint256 amount) returns (bool)"
 ];
 
 export class NextJSPaymentGateway {
@@ -114,7 +115,8 @@ export class NextJSPaymentGateway {
         calls.push({
             target: paymentDetails.token,
             allowFailure: false,
-            callData: erc20Interface.encodeFunctionData("transfer", [
+            callData: erc20Interface.encodeFunctionData("transferFrom", [
+                paymentDetails.payerAddress,
                 paymentDetails.merchant,
                 paymentDetails.amount
             ])
