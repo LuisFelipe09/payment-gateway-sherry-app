@@ -107,6 +107,7 @@ export class NextJSPaymentGateway {
         const calls = [];
 
         // 1. Aprobar si es necesario
+        /*
         if (allowance < BigInt(paymentDetails.amount)) {
             calls.push({
                 target: paymentDetails.token,
@@ -117,6 +118,7 @@ export class NextJSPaymentGateway {
                 ])
             });
         }
+            */
 
         // 2. Ejecutar pago
         calls.push({
