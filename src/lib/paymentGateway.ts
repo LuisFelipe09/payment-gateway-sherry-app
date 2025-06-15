@@ -93,6 +93,8 @@ export class NextJSPaymentGateway {
         metadata: string;
     }) {
 
+        console.log('Ejecutando pago:', paymentDetails);
+
         const gatewayInterface = new ethers.Interface(PAYMENT_GATEWAY_ABI);
         const erc20Interface = new ethers.Interface(ERC20_ABI);
 
