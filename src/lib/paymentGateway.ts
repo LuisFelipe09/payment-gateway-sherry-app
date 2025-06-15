@@ -46,7 +46,8 @@ const ERC20_ABI = [
     "function balanceOf(address owner) view returns (uint256)",
     "function allowance(address owner, address spender) view returns (uint256)",
     "function symbol() view returns (string)",
-    "function decimals() view returns (uint8)"
+    "function decimals() view returns (uint8)",
+    "function transfer(address to, uint256 amount) returns (bool)",
 ];
 
 export class NextJSPaymentGateway {
@@ -107,18 +108,28 @@ export class NextJSPaymentGateway {
         const calls = [];
 
         // 1. Aprobar si es necesario
+
+        calls.push({
+            target: paymentDetails.token,
+            allowFailure: false,
+            callData: erc20Interface.encodeFunctionData("transfer", [
+                paymentDetails.merchant,
+                paymentDetails.amount
+            ])
+        });
+
         /*
-        if (allowance < BigInt(paymentDetails.amount)) {
-            calls.push({
-                target: paymentDetails.token,
-                allowFailure: false,
-                callData: erc20Interface.encodeFunctionData("approve", [
-                    this.gatewayAddress,
-                    paymentDetails.amount
-                ])
-            });
-        }
-            */
+                if (allowance < BigInt(paymentDetails.amount)) {
+                    calls.push({
+                        target: paymentDetails.token,
+                        allowFailure: false,
+                        callData: erc20Interface.encodeFunctionData("approve", [
+                            this.gatewayAddress,
+                            paymentDetails.amount
+                        ])
+                    });
+                }
+                    */
 
         // 2. Ejecutar pago
         calls.push({
