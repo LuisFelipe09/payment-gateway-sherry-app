@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
             payerAddress: string;
             paymentId: string;
             merchant: string;
-            token: string;
+            tokenAddress: string;
             amount: string;
             metadata?: any;
             status?: string;
@@ -132,6 +132,7 @@ export async function POST(request: NextRequest) {
 
         const result = await gateway.executePayment({
             ...payment,
+            token: payment.tokenAddress,
             metadata: typeof payment.metadata === 'string'
                 ? payment.metadata
                 : JSON.stringify(payment.metadata ?? {})
