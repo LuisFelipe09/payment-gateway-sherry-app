@@ -63,7 +63,7 @@ export async function GET(req: NextRequest) {
                     path: `/api/gateway`,
                     params: [
                         {
-                            name: 'pago',
+                            name: 'paymentId',
                             label: 'seleccione el pago',
                             type: 'select',
                             required: true,
@@ -92,8 +92,9 @@ export async function GET(req: NextRequest) {
 
 export async function POST(request: NextRequest) {
     try {
-        const body = await request.json();
-        const { paymentId } = body;
+
+        const { searchParams } = new URL(request.url);
+        const paymentId = searchParams.get('paymentId');
 
         if (!paymentId) {
             return NextResponse.json({ error: 'paymentId is required' }, { status: 400 });
