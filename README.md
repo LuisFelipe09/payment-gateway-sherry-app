@@ -52,6 +52,8 @@ src/
 
 Codigo ejemplo smart contract
 
+[despliegue fuji](https://testnet.snowscan.xyz/address/0x8464135c8F25Da09e49BC8782676a84730C318bC)
+
 ```
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
